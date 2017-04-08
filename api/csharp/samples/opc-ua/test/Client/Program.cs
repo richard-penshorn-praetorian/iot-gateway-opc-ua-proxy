@@ -49,6 +49,7 @@ namespace NetCoreConsoleClient
             {
                 Console.WriteLine("Exit due to Exception: {0}", e.Message);
             }
+            Console.ReadKey(true);
         }
 
         public static async Task ConsoleSampleClient(string endpointURL)
@@ -154,13 +155,13 @@ namespace NetCoreConsoleClient
             Byte[] continuationPoint;
 
             references = session.FetchReferences(ObjectIds.ObjectsFolder);
-#if PERF
             Stopwatch w = Stopwatch.StartNew();
-            for (int i = 1; i <= 5; i++) {
-                // Console.Clear();
-                Console.WriteLine($"4 - Browse the OPC UA server namespace ({i}).");
+#if PERF
+        for (int i = 1; ; i++) {
+            // Console.Clear();
+            Console.WriteLine($"4 - Browse the OPC UA server namespace ({i}).");
 #else
-                Console.WriteLine($"4 - Browse the OPC UA server namespace.");
+            Console.WriteLine($"4 - Browse the OPC UA server namespace.");
 #endif
             session.Browse(
                 null,
@@ -175,37 +176,12 @@ namespace NetCoreConsoleClient
                 out references);
 
             Console.WriteLine(" DisplayName, BrowseName, NodeClass");
-            foreach (var rd in references)
-            {
-                Console.WriteLine(" {0}, {1}, {2}", rd.DisplayName, rd.BrowseName, rd.NodeClass);
-                ReferenceDescriptionCollection nextRefs;
-                byte[] nextCp;
-                session.Browse(
-                    null,
-                    null,
-                    ExpandedNodeId.ToNodeId(rd.NodeId, session.NamespaceUris),
-                    0u,
-                    BrowseDirection.Forward,
-                    ReferenceTypeIds.HierarchicalReferences,
-                    true,
-                    (uint)NodeClass.Variable | (uint)NodeClass.Object | (uint)NodeClass.Method,
-                    out nextCp,
-                    out nextRefs);
-
-                foreach (var nextRd in nextRefs)
-                {
-                    Console.WriteLine("   + {0}, {1}, {2}", nextRd.DisplayName, nextRd.BrowseName, nextRd.NodeClass);
-                }
-            }
+            BrowseChildren("", references, session);
+            Console.WriteLine($" ....        took {w.ElapsedMilliseconds} ms...");
 #if PERF
             }
-            Console.WriteLine($" ....        took {w.ElapsedMilliseconds} ms...");
             session.Close();
         }
-        catch (Exception e) {
-            Console.WriteLine(e.ToString());
-        }
-    }
 #else
 
             Console.WriteLine("5 - Create a subscription with publishing interval of 1 second.");
@@ -226,8 +202,38 @@ namespace NetCoreConsoleClient
             subscription.Create();
 
             Console.WriteLine("8 - Running...Press any key to exit...");
-            Console.ReadKey(true);
 #endif
+        }
+
+        private static void BrowseChildren(string prefix, ReferenceDescriptionCollection references, Session session)
+        {
+            foreach (var rd in references)
+            {
+                Console.WriteLine("{0}+ {1}, {2}, {3}", prefix, rd.DisplayName, rd.BrowseName, rd.NodeClass);
+                try
+                {
+                    ReferenceDescriptionCollection nextRefs;
+                    byte[] nextCp;
+
+                    session.Browse(
+                        null,
+                        null,
+                        ExpandedNodeId.ToNodeId(rd.NodeId, session.NamespaceUris),
+                        0u,
+                        BrowseDirection.Forward,
+                        ReferenceTypeIds.HierarchicalReferences,
+                        true,
+                        (uint) NodeClass.Variable | (uint) NodeClass.Object | (uint) NodeClass.Method,
+                        out nextCp,
+                        out nextRefs);
+
+                    BrowseChildren(prefix + "   ", nextRefs, session);
+                }
+                catch (Exception)
+                {
+                    throw;
+                }
+            }
         }
 
         private static void OnNotification(MonitoredItem item, MonitoredItemNotificationEventArgs e)
